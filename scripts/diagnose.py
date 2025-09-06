@@ -94,4 +94,6 @@ if __name__ == "__main__":
     - Cognitive: No
     """
     spiral_img = "/kaggle/input/kaggledatafortesting/parkinson/V01PE01.png"
-    print(diagnose(patient, image_path=spiral_img))
+    print(" Doctor's Diagnosis:\n")
+    print(rag_chat_mistral(test_prompt, image_path=spiral_image_path))
+
