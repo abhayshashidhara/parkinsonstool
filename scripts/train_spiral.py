@@ -1,41 +1,30 @@
-# Import libraries
-import torch
-import torch.nn as nn
-import torch.optim as optim
+import torch, torch.nn as nn, torch.optim as optim
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
-from torchvision import transforms
-import timm
-from PIL import Image
 
-# Path to the dataset (update if needed)
-dataset_path = "/kaggle/input/astory"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+dataset_path = "/kaggle/input/pd-imagingdata/PD_imagingData"
 
-# Define how images will be preprocessed before training
 spiral_transform = transforms.Compose([
+    transforms.Grayscale(num_output_channels=3),
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225]),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225]),
 ])
 
-# Load dataset and prepare batches
 dataset = ImageFolder(root=dataset_path, transform=spiral_transform)
+print("class_to_idx:", dataset.class_to_idx)
 loader = DataLoader(dataset, batch_size=16, shuffle=True)
 
-# Create the model (ResNet18 with 2 output classes)
-model = timm.create_model("resnet18.a1_in1k", pretrained=True, num_classes=2)
-model = model.cuda()
-
-# Define loss function and optimizer
+model = timm.create_model("resnet18.a1_in1k", pretrained=True, num_classes=2).to(DEVICE)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
-# Training loop
-for epoch in range(5):  # run for 5 epochs
+for epoch in range(5):
     model.train()
     for imgs, labels in loader:
-        imgs, labels = imgs.cuda(), labels.cuda()
+        imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
         outputs = model(imgs)
         loss = criterion(outputs, labels)
         optimizer.zero_grad()
@@ -43,20 +32,20 @@ for epoch in range(5):  # run for 5 epochs
         optimizer.step()
     print(f"Epoch {epoch+1}: Loss {loss.item():.4f}")
 
-# Save the trained model
+# Save model
 torch.save(model.state_dict(), "spiral_model.pth")
-print(" Spiral classifier trained & saved.")
+print("Spiral classifier trained and saved.")
+spiral_model = timm.create_model("resnet18.a1_in1k", pretrained=True, num_classes=2).to(DEVICE)
+spiral_model.load_state_dict(torch.load("/kaggle/working/spiral_model.pth", map_location=DEVICE))
+spiral_model.eval()
 
-# Load the model for prediction
-spiral_model = timm.create_model("resnet18.a1_in1k", pretrained=True, num_classes=2)
-spiral_model.load_state_dict(torch.load("/kaggle/working/spiral_model.pth"))
-spiral_model.eval().cuda()
-
-# Function to predict from a spiral image
+# Predict helper
 def predict_spiral_image(image_path):
     img = Image.open(image_path).convert("RGB")
-    img_tensor = spiral_transform(img).unsqueeze(0).cuda()
+    x = spiral_transform(img).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
-        out = spiral_model(img_tensor)
+        out = spiral_model(x)
         pred = torch.argmax(out, dim=1).item()
-    return "The spiral test suggests **signs of Parkinson’s**." if pred == 1 else "The spiral test **does not show signs of Parkinson’s**."
+    return ("The spiral test suggests signs of Parkinson’s."
+            if pred == 1 else
+            "The spiral test does not show signs of Parkinson’s.")
